@@ -39,7 +39,8 @@ chem.ref.df <- chem.df %>%
 ```{r}
 heat_chem.df <- chem.df %>% 
   filter(project_name != "wallkill peers 2018") %>% 
-  mutate(result_value = if_else(interpreted_qualifiers == "analyte was analyzed for but not detected",
+  mutate(interpreted_qualifiers = if_else(is.na(interpreted_qualifiers), "blank", interpreted_qualifiers),
+         result_value = if_else(grepl("analyte was analyzed for but not detected", interpreted_qualifiers),
                                 0,
                                 result_value)) %>% 
   select(station,
@@ -79,9 +80,12 @@ heat.df <- bind_rows(heat_bap.df,
 
 ```{r, fig.width=20, fig.height=15}
 heat.mat <- heat.df %>% 
+  filter(param != "bap") %>%
   unite(site, c("station", "date_time")) %>% 
   spread(site, normalized) %>% 
+  
   tibble::column_to_rownames("param") %>% 
+   
   as.matrix()
 
 heatmap(heat.mat,
