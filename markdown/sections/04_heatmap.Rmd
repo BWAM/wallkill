@@ -1,0 +1,187 @@
+---
+title: "Untitled"
+author: "Zachary M. Smith"
+date: "4/24/2019"
+output: html_document
+---
+
+# Heatmap
+
+## Preprocessing
+
+__On 4/29/2019, Brian Duffy suggested summarizing data collected from a station by year (i.e., find the mean value for each year).__
+
+### BAP
+
+BAP is rescaled to represent values between 0 and 1 by dividing by 10, the max BAP score.
+```{r}
+heat_bap.df <- bap.df %>% 
+  group_by(station,
+           date) %>% 
+  summarize(bap = mean(bap, na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  mutate(normalized = 1 - (bap / 10),
+         param = "bap",
+         station = paste("13", station, sep = "-")) %>% 
+  select(station, date, param, normalized)
+```
+
+### Chemistry
+
+```{r}
+chem.ref.df <- chem.df %>% 
+  select(chemical_name) %>% 
+  distinct()
+
+# knitr::kable(chem.ref.df)
+```
+
+```{r}
+heat_chem.df <- chem.df %>% 
+  filter(project_name != "wallkill peers 2018") %>% 
+  mutate(result_value = if_else(interpreted_qualifiers == "analyte was analyzed for but not detected",
+                                0,
+                                result_value)) %>% 
+  select(station,
+         date_time,
+         chemical_name,
+         result_value) %>% 
+  group_by(station,
+         date_time,
+         chemical_name) %>% 
+  summarize(result_value = mean(result_value, na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  group_by(chemical_name) %>% 
+  mutate(obs_min = min(result_value, na.rm = TRUE),
+         obs_max = max(result_value, na.rm = TRUE)) %>% 
+  ungroup() %>% 
+  mutate(normalized = (result_value - obs_min) / (obs_max - obs_min)) %>% 
+  rename(param = chemical_name) %>% 
+  select(station, date_time, param, normalized)
+
+# phosphorus 0 - 75
+# Chlorophyll a 0-6
+# 
+```
+
+### Finalize
+
+```{r}
+heat.df <- bind_rows(heat_bap.df,
+                     heat_chem.df) %>% 
+  mutate(date_time = lubridate::month(date_time)) %>% 
+  group_by(station, date_time, param) %>% 
+  summarize(normalized = mean(normalized, na.rm = TRUE)) %>% 
+  ungroup()
+```
+
+
+
+```{r, fig.width=20, fig.height=15}
+heat.mat <- heat.df %>% 
+  unite(site, c("station", "date_time")) %>% 
+  spread(site, normalized) %>% 
+  tibble::column_to_rownames("param") %>% 
+  as.matrix()
+
+heatmap(heat.mat,
+        col = viridis::inferno(256),
+        row_names_max_width = unit(6, "cm")
+        )
+```
+
+```{r, fig.width=20, fig.height=15}
+heat.mat <- heat.df %>% 
+  unite(site, c("station", "date_time")) %>% 
+  spread(site, normalized) %>% 
+  tibble::column_to_rownames("param") %>% 
+  as.matrix()
+
+heatmap(heat.mat,
+        col = viridis::inferno(256),
+        row_names_max_width = unit(6, "cm")
+        )
+```
+
+```{r, fig.width=10, fig.height=8}
+heat.nutrient <- heat.df %>% 
+  unite(site, c("station", "date")) %>% 
+  filter(param %in% c("nitrate+nitrite as nitrogen",
+                      "nitrogen",
+                      "nitrogen, ammonia (as n)",
+                      "nitrogen, kjeldahl, total",
+                      "nitrogen, nitrate (as n)",
+                      "nitrogen, nitrite",
+                      "phosphorus, total (as p)")) %>% 
+  spread(site, normalized) %>% 
+  tibble::column_to_rownames("param") %>% 
+  as.matrix()
+
+heatmap(heat.nutrient,
+        col = viridis::inferno(256),
+        row_names_max_width = unit(6, "cm")
+        )
+```
+
+```{r, fig.width=10, fig.height=8}
+heat.nutrient <- heat.df %>% 
+  unite(site, c("station", "date")) %>% 
+  filter(param %in% c("aluminum",
+                      "copper",
+                      "iron",
+                      "lead",
+                      "magnesium",
+                      "silver",
+                      "zinc")) %>% 
+  spread(site, normalized) %>% 
+  tibble::column_to_rownames("param") %>% 
+  as.matrix()
+
+heatmap(heat.nutrient,
+        col = viridis::inferno(256),
+        row_names_max_width = unit(6, "cm")
+        )
+```
+
+
+```{r}
+heat.df %>% 
+  unite(site, c("station", "date")) %>% 
+  group_by(site) %>% 
+  summarize(normalized = mean(normalized, na.rm = TRUE)) %>% 
+  arrange(normalized) %>% 
+  ggplot(aes(1, site, fill = normalized)) +
+  geom_tile() +
+  scale_fill_viridis_c(option = "inferno")
+```
+
+## Plot
+
+```{r}
+heat.df %>%
+  # mutate(week = lubridate::week(date),
+  #        year = lubridate::year(date)) %>% 
+  # unite(date, c("week", "year")) %>% 
+  unite(site, c("station", "date")) %>% 
+  heatmap()
+```
+
+```{r, fig.width=10, fig.height=12}
+heat.df %>%
+  # mutate(week = lubridate::week(date),
+  #        year = lubridate::year(date)) %>% 
+  # unite(date, c("week", "year")) %>% 
+  unite(site, c("station", "date")) %>% 
+ggplot(aes(site, param, fill = normalized)) +
+  geom_tile() +
+  scale_fill_viridis_c(option = "inferno") +
+  xlab("Station") +
+  ylab("Parameter") +
+  scale_y_discrete(expand = c(0, 0)) +
+  theme(axis.text.x = element_text(angle = 90,
+                                   hjust = 1,
+                                   vjust = 0.5))
+
+
+```
+
