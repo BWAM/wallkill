@@ -1,0 +1,22 @@
+---
+title: "Wallkill"
+author: "Zachary M. Smith"
+date: "4/29/2019"
+output: html_document
+---
+
+```{r, child="sections/01_prep.Rmd"}
+
+```
+
+```{r, child="sections/02_stations.Rmd"}
+
+```
+
+```{r, child="sections/03_bap.Rmd"}
+
+```
+
+```{r, child="sections/04_heatmap.Rmd"}
+
+```
