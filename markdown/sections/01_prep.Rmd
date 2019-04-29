@@ -153,8 +153,7 @@ chem2017.df <- file.path(data.path,
   read.csv(stringsAsFactors = FALSE,
            na.strings = c(""," ","NA"),
            colClasses = c("fraction" = "character")) %>% 
-  clean_up() %>% 
-  mutate(fraction = "t")
+  clean_up()
 
 chem2018.df <- file.path(data.path,
                          "2018_wallkill_chem_qaqcd-2019-03-29.csv") %>% 
@@ -170,29 +169,6 @@ peers2018.df <- file.path(data.path,
            colClasses = c("fraction" = "character")) %>% 
   clean_up()  %>% 
   mutate(fraction = "t")
-```
-
-### 2017 Special Study Chemistry
-
-The 2017 Special Study chemistry data did not go through the QAQC procedure, and therefore represents the data provided by the lab. There are `r length(names(chem2017.df))` columns in the 2017 Special Study data but only `r length(names(chem2018.df))` in the 2018 RAS data. We will only retain the columns present in the QAQCed 2018 RAS data. The script below identifies any columns present in the 2018 RAS data but missing in the 2017 Special Study data. We will want to add these columns to the 2017 Special Study data, if possible.
-```{r}
-names(chem2018.df)[!names(chem2018.df) %in% names(chem2017.df)]
-```
-
-"project_name" was the only column that was present in the 2018 RAS data but absent from the 2017 Special Study data. The script below adds the column "project_name" to the 2017 Special Study data frame. The column is populated with the character string "wallkill special study 2017", which follows the labeling scheme found in the 2018 RAS data (i.e., wallkill ras 2018). 
-```{r}
-chem2017.df$project_name <- "wallkill special study 2017"
-```
-
-Now that the 2017 Special Study data contains all of the columns present in the 2018 RAS data, the 2017 Special Study data is subset to only include columns that are found in the 2018 RAS data.
-```{r}
-chem2017.df <- chem2017.df[, names(chem2017.df) %in% names(chem2018.df)]
-```
-
-Duplicate samples are removed from the data frame.
-```{r}
-chem2017.df <- chem2017.df %>% 
-  filter(!str_detect(sys_sample_code, "-dup"))
 ```
 
 ### 2018 PEERS
