@@ -15,7 +15,7 @@ library(leaflet)
 Establish file path to the project directory. This will be used to access data.
 ```{r}
 project.path <- rprojroot::find_rstudio_root_file()
-data.path <- file.path(project.path, "data", "2019-04-24")
+data.path <- file.path(project.path, "data", "2019-04-30")
 ```
 
 # Data Preprocessing
@@ -49,41 +49,102 @@ clean_up <- function(x) {
 
 ## Stations
 
-## Station Order
-
-Zachary Smith ordered the Wallkill 2017 and 2018 samples from upstream to downstream relative to the mainstem Wallkill.
+On 4/30/2019, A.J. Smith suggested that we drop stations sampled for HABs monitoring (i.e., "13-gunk-40.3", "13-gunk-t35-0.2", "13-gunk-37.7", and "13-lgun-6.0").
 ```{r}
-station_order.df <- file.path(data.path, "finalized", "wallkill_station-order_up-to-down.csv") %>% 
-  read.csv(stringsAsFactors = FALSE,
-           na.strings=c(""," ","NA")) %>% 
-  clean_up()
+ex.station.vec <- c("13-gunk-40.3",
+                    "13-gunk_t35-0.2",
+                    "13-gunk-37.7",
+                    "13-lgun-6.0")
 ```
 
-## Station Information
+### Station Information
 
-Import Wallkill 2017 and 2018 station information and combine these into a single data frame.
+Import Wallkill 2017 and 2018 station information and combine these into a single data frame. 2018 special study station "13-walk-0.8" is considered equivalent to "13-walk-0.7", and therefore is relabeled as "13-walk-0.8".
 ```{r}
-sites17.df <- file.path(data.path, "WallkillSites2017.csv") %>% 
+stations17.df <- file.path(data.path,
+                           "sites",
+                           "WallkillSites2017.csv") %>% 
   read.csv(stringsAsFactors = FALSE,
            na.strings=c(""," ","NA")) %>% 
   clean_up() %>% 
-  rename(site_id = sbu.id,
+  rename(station = sbu.id,
          survey = ras)
 
-sites18.df <- file.path(data.path, "WallkillSites2018.csv") %>% 
+stations18.df <- file.path(data.path,
+                           "sites",
+                           "WallkillSites2018.csv") %>% 
   read.csv(stringsAsFactors = FALSE,
            na.strings=c(""," ","NA")) %>% 
   clean_up() %>% 
-  rename(stream = name)
+  rename(station = site_id,
+         stream = name) %>% 
+  mutate(station = if_else(station %in% "13-walk-0.8", "13-walk-0.7", station))
 
-sites.df <- bind_rows(sites17.df, sites18.df) %>% 
-  mutate(rivmile = gsub(".*-", "", site_id),
-         location = gsub("-.*", "", site_id))
+stations.df <- bind_rows(stations17.df, stations18.df) %>% 
+  mutate(rivmile = gsub(".*-", "", station),
+         location = gsub("-.*", "", station),
+         station = paste("13", station, sep = "-")) %>% 
+  filter(!station %in% ex.station.vec)
 ```
 
 Clear the global environment of unnecessary objects.
 ```{r}
-rm(sites17.df, sites18.df)
+rm(stations17.df, stations18.df)
+```
+
+### PEERS Stations
+
+Import 2018 PEERS stations collected within the Wallkill basin.
+```{r}
+stations_peers.df <- file.path(data.path,
+                           "peers",
+                           "peers_stations.csv") %>% 
+  read.csv(stringsAsFactors = FALSE,
+           na.strings=c(""," ","NA")) %>% 
+  clean_up() %>% 
+  select(station, latitude, longitude) %>% 
+  mutate(type = "peers")
+```
+
+Add the PEERS stations to the `stations.df` data frame.
+```{r}
+stations.df <- bind_rows(stations.df, stations_peers.df) 
+```
+
+### Gage Stations
+
+Import USGS gage stations found within the Wallkill basin.
+```{r}
+gage.df <- file.path(data.path,
+                           "gage",
+                           "GageSites.csv") %>% 
+  read.csv(stringsAsFactors = FALSE,
+           na.strings=c(""," ","NA")) %>% 
+  clean_up() %>% 
+  mutate(type = "gage")
+```
+
+Add the gaged stations to the `stations.df` data frame.
+```{r}
+stations.df <- bind_rows(stations.df, gage.df)  %>% 
+  mutate(gage = if_else(type %in% "gage", TRUE, FALSE))
+```
+
+### Station Order
+
+Zachary Smith ordered the Wallkill 2017 and 2018 samples from upstream to downstream relative to the mainstem Wallkill.
+```{r}
+station_order.df <- file.path(data.path,
+                              "finalized",
+                              "wallkill_station-order_up-to-down.csv") %>% 
+  read.csv(stringsAsFactors = FALSE,
+           na.strings=c(""," ","NA")) %>% 
+  clean_up() %>% 
+  filter(!station %in% ex.station.vec)
+```
+
+```{r}
+stations.df <- left_join(station_order.df, stations.df, by = "station")
 ```
 
 ## BAP
@@ -100,21 +161,25 @@ bap.df <- c("WALLKILL2017_BAP.csv",
             "WALLKILL2018_BAP.csv") %>% 
   map_df(function(file.i) {
     file.path(data.path,
+              "bap",
               file.i) %>% 
       read.csv(stringsAsFactors = FALSE,
                na.strings=c(""," ","NA"))
   }) %>% 
   clean_up() %>% 
   rename(station = location.station) %>% 
-  mutate(rivmile = factor(rivmile, sort(unique(rivmile), decreasing = TRUE)),
+  mutate(station = paste("13", station, sep = "-"),
+         rivmile = factor(rivmile, sort(unique(rivmile), decreasing = TRUE)),
          date = as.Date(date, "%m/%d/%Y")) %>% 
   group_by(station, date) %>% 
-  mutate(mean_bap = mean(bap, na.rm = TRUE),
+  mutate(replicates = n(),
+         mean_bap = mean(bap, na.rm = TRUE),
          median_bap = median(bap, na.rm = TRUE)) %>% 
   ungroup() %>% 
   filter(!station %in% c("qker-0.9",
                         "walk-35.6",
-                        "wklei-0.6"))
+                        "wklei-0.6"),
+         !station %in% ex.station.vec)
 ```
 
 The data is exported as a CSV and manually added to the Wallkill SharePoint "finalized" folder.
@@ -132,6 +197,7 @@ data.table::fwrite(bap.df,
 Import the Wallkill average chemistry data.
 ```{r}
 tp.df <- file.path(data.path,
+                   "chemistry",
                    "Wallkill_AVG_chem.csv") %>% 
   read.csv(stringsAsFactors = FALSE,
            na.strings=c(""," ","NA")) %>% 
@@ -146,9 +212,10 @@ tp.df <- file.path(data.path,
 
 ### Import
 
-Import Wallkill 2017 Special study, 2018 RAS, and 2018 PEERS chemistry data. Perform general data standardization with the `clean_up()` function. The 2018 RAS data was QAQCed by Gavin Lemley (2019-04-29) using an R script developed by Alene Onion and Gavin Lemley. __However, the 2017 Special Study chemistry and the 2018 PEERS data have not been QAQCed.__
+Import Wallkill 2017 and 2018 Special Studies and 2018 PEERS chemistry data. Perform general data standardization with the `clean_up()` function. The 2018 Special Study data was QAQCed by Gavin Lemley (2019-04-29) using an R script developed by Alene Onion and Gavin Lemley. __However, the 2017 Special Study chemistry and the 2018 PEERS data have not been QAQCed.__ 
 ```{r}
 chem2017.df <- file.path(data.path,
+                         "chemistry",
                          "2017_wallkill_chem_qaqcd-2019-04-29.csv") %>% 
   read.csv(stringsAsFactors = FALSE,
            na.strings = c(""," ","NA"),
@@ -156,14 +223,17 @@ chem2017.df <- file.path(data.path,
   clean_up()
 
 chem2018.df <- file.path(data.path,
+                         "chemistry",
                          "2018_wallkill_chem_qaqcd-2019-03-29.csv") %>% 
   read.csv(stringsAsFactors = FALSE,
            na.strings = c(""," ","NA"),
            colClasses = c("fraction" = "character")) %>% 
-  clean_up() 
+  clean_up() %>% 
+  mutate(project_name = "wallkill special study 2018")
 
 peers2018.df <- file.path(data.path,
-                         "PEERS.wallkill.output.csv") %>% 
+                          "peers",
+                         "PEERS.wallkill.output.site.names.fixed.csv") %>% 
   read.csv(stringsAsFactors = FALSE,
            na.strings = c(""," ","NA"),
            colClasses = c("fraction" = "character")) %>% 
@@ -173,17 +243,17 @@ peers2018.df <- file.path(data.path,
 
 ### 2018 PEERS
 
-We will only retain the columns present in the QAQCed 2018 RAS data. The script below identifies any columns present in the 2018 RAS data but missing in the 2018 PEERS data. We will want to add these columns to the 2018 PEERS data, if possible.
+We will only retain the columns present in the QAQCed 2018 Special Study data. The script below identifies any columns present in the 2018 Special Study data but missing in the 2018 PEERS data. We will want to add these columns to the 2018 PEERS data, if possible.
 ```{r}
 names(chem2018.df)[!names(chem2018.df) %in% names(peers2018.df)]
 ```
 
-"project_name" was the one of the columns which was present in the 2018 RAS data but absent from the 2018 PEERS data. The script below adds the column "project_name" to the 2018 PEERS data frame. The column is populated with the character string "wallkill peers 2018", which follows the labeling scheme found in the 2018 RAS data (i.e., wallkill ras 2018). 
+"project_name" was the one of the columns which was present in the 2018 Special Study data but absent from the 2018 PEERS data. The script below adds the column "project_name" to the 2018 PEERS data frame. The column is populated with the character string "wallkill peers 2018", which follows the labeling scheme found in the 2018 Special Study data (i.e., wallkill special study 2018). 
 ```{r}
 peers2018.df$project_name <- "wallkill peers 2018"
 ```
 
-"siteid" is present in the 2018 RAS data but absent from the 2018 PEERS data. The script below adds the column "siteid" to the 2018 PEERS data frame. The column is populated by extracting the basin, location, and rivermile elements from "sys_sample_code", which follows the same pattern found in the 2018 RAS data.
+"siteid" is present in the 2018 Special Study data but absent from the 2018 PEERS data. The script below adds the column "siteid" to the 2018 PEERS data frame. The column is populated by extracting the basin, location, and rivermile elements from "sys_sample_code", which follows the same pattern found in the 2018 Special Study data.
 
 The regex was difficult to solve. I found the answer to this stackoverflow question to be helpful (https://stackoverflow.com/questions/25448921/regex-to-extract-all-characters-before-the-second-dash-hyphen). The description below is modified from Casimir et Hippolyte answer in the link above.
 
@@ -193,7 +263,8 @@ The regex was difficult to solve. I found the answer to this stackoverflow quest
 4. -?? = optional hyphen (lazy)
 5. ){3} = repeat the group 3 times
 ```{r}
-peers2018.df$siteid <- str_extract(peers2018.df$sys_sample_code, "\\A(?:[^-]++-??){3}")
+peers2018.df$siteid <- str_extract(peers2018.df$sys_sample_code,
+                                   "\\A(?:[^-]++-??){3}")
 ```
 
 Now that the 2018 PEERS data contains all of the columns present in the 2018 RAS data, the 2018 PEERS data is subset to only include columns that are found in the 2018 RAS data.
@@ -203,20 +274,24 @@ peers2018.df <- peers2018.df[, names(peers2018.df) %in% names(chem2018.df)]
 
 ### Append
 
-The Wallkill 2017 Special study, 2018 RAS, and 2018 PEERS chemistry data are combined into a single data frame.
+The Wallkill 2017 and 2018 Special Studies and 2018 PEERS chemistry data are combined into a single data frame.
 
-1. Wallkill 2017 Special study, 2018 RAS, and 2018 PEERS chemistry data are appended together with `bind_rows()`
+1. Wallkill 2017 and 2018 Special Studies and 2018 PEERS chemistry data are appended together with `bind_rows()`
 2. The "date" column is converted to the data time class "POSIXct"
 3. "siteid" is renamed to "station"
 4. The columns are re-ordered using `select()`
+5. 2018 special study station "13-walk-0.8" is considered equivalent to "13-walk-0.7", and therefore is relabeled as "13-walk-0.8".
 ```{r}
 chem.df <- bind_rows(chem2017.df, chem2018.df, peers2018.df) %>% 
   mutate(date_time = if_else(project_name == "wallkill peers 2018",
-                             as.POSIXct(sample_date, "%Y-%m-%d", tz = "EST"),
-                             as.POSIXct(sample_date, "%m/%d/%Y %H:%M", tz = "EST")),
+                             as.POSIXct(sample_date, "%m/%d/%Y", tz = "EST"),
+                             as.POSIXct(sample_date, "%Y-%m-%d %H:%M:%S", tz = "EST")),
          date_time = as.character(date_time)) %>% 
   rename(station = siteid) %>% 
-  select(project_name, sys_sample_code, station, date_time, everything(), -sample_date)
+  select(project_name, sys_sample_code, station,
+         date_time, everything(), -sample_date) %>% 
+  filter(!station %in% ex.station.vec) %>% 
+  mutate(station = if_else(station %in% "13-walk-0.8", "13-walk-0.7", station))
 ```
 
 The data is exported as a CSV and manually added to the Wallkill SharePoint "finalized" folder.
@@ -232,89 +307,4 @@ Clear the global environment of unnecessary objects.
 rm(chem2017.df, chem2018.df, peers2018.df)
 ```
 
-## Field Data
 
-### Import
-
-Import Wallkill 2018 field data. Perform general data standardization with the `clean_up()` function. Convert the "coll_date_time" column to the calss POSIXct.
-```{r}
-field.df <- file.path(data.path,
-                      "Wallkill_survey_Chem_Only.csv") %>% 
-  read.csv(stringsAsFactors = FALSE,
-           na.strings = c(""," ","NA")) %>% 
-  clean_up() %>% 
-  mutate(date_time = as.POSIXct(coll_date_time, format = "%m/%d/%Y %H:%M"))
-```
-
-### Preprocessing
-
-This data frame is broken into three pieces (general information, ambient chemistry data, and user preception data) to make it easier to manipulate the data.
-
-#### General Information
-
-The code below checks to see if the column "y" has equivalent values to "field_lat and if "x" has equivalent values to "field_lon". These values are equivalent, and therefore "x" and "y" can be excluded from this data frame.
-```{r}
-any(field.df$field_lat != field.df$y | field.df$field_lon != field.df$x)
-```
-
-General field information is selected to represent this data frame.
-```{r}
-field_info.df <- field.df %>% 
-  select(project, site_loc_id:descript, date_time,
-         new_site, update_site,
-         coll_date_time, crew, info_type, hablab_id_num,
-         bloom_desc, bloom_desc_2, r_hablab_id, s_hablab_id,
-         current_weather, past_weather,
-         water_chem, qa_qc_type,
-         samp_loc, equip_used,
-         tox, 
-         prim_contact, prim_variable, sec_contact, sec_variable,
-         notes)
-```
-
-#### Ambient Chemistry Data
-
-The ambient chemistry data, collected with a sonde, is transformed to a long data format. The column "data_type" is added to indicate that values in these rows are represent the ambient chemistry data.
-```{r}
-field_chem.df <- field.df %>% 
-  select(project, site_loc_id, date_time,
-         temp:salinity) %>% 
-  gather(param, value, temp:salinity) %>% 
-  mutate(data_type = "amb_chem")
-```
-
-#### User Preception Data
-
-The user preception data is transformed to a long data format. The column "data_type" is added to indicate that values in these rows are represent the user preception data.
-```{r}
-field_precep.df <- field.df %>% 
-  select(project, site_loc_id, date_time,
-         water_clarity:discharge_pipes) %>% 
-  gather(param, value, water_clarity:discharge_pipes) %>% 
-  mutate(data_type = "user_preception")
-```
-
-#### Combine the Data
-
-Append the ambient chemistry and user preception data into a single data frame. Again, the "data_type" column can be used to distinquish between these two sets of data.
-```{r}
-field_values.df <- bind_rows(field_chem.df, field_precep.df)
-```
-
-The `field_values.df` data frame is joined with the general field info.
-```{r}
-field_final.df <- full_join(field_info.df, field_values.df, by = c("project", "site_loc_id", "date_time"))
-```
-
-The data is exported as a CSV and manually added to the Wallkill SharePoint "finalized" folder.
-```{r}
-data.table::fwrite(field_final.df ,
-                   file.path(data.path,
-                             "finalized",
-                             "wallkill_field_2018.csv"))
-```
-
-Clear the global environment of unnecessary objects.
-```{r}
-rm(field.df, field_info.df, field_chem.df, field_precep.df, field_values.df)
-```

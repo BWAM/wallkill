@@ -1,0 +1,53 @@
+---
+title: "Untitled"
+author: "Zachary M. Smith"
+date: "4/30/2019"
+output: html_document
+---
+
+## Station Locations
+
+Import he Wallkill NHD clip created by Charles Stoll as a SpatialLinesDataFrame.
+```{r}
+nhd.gdb <- file.path(project.path, "data", "gis", "Wallkill_Clip_NHD.gdb")
+
+streams.polyline <- rgdal::readOGR(dsn = nhd.gdb, layer = "WALK_0_7_NHD_CLIP")
+```
+
+Create a function to standardize leaflet plots.
+```{r}
+leaflet_plot <- function(x) {
+
+pal <- colorFactor(c("#508b1a", "#551a8b"), domain = c(unique(x$gage)))
+
+leaflet(x) %>% 
+  addTiles() %>% 
+  addPolylines(data = streams.polyline,
+               weight = 2,
+               opacity = 1) %>% 
+  addCircleMarkers(~longitude, ~latitude,
+                   color = ~pal(gage),
+                   stroke = FALSE, fillOpacity = 1.00,
+             popup = paste(
+               paste("<b>Station:</b>", x$station),
+               paste("<b>Stream:</b>", x$stream),
+               paste("<b>Longitude:</b>", x$longitude),
+               paste("<b>Latitude:</b>", x$latitude),
+               paste("<b>Type:</b>", x$type),
+               sep = "<br/>"
+             ))
+}
+```
+
+Plot the Wallkill locations on an interactive map.
+```{r}
+leaflet_plot(stations.df)
+```
+
+```{r}
+library(ggmap)
+ggplot(data = stations.df, aes(x = longitude, y = latitude, color = order)) +
+  geom_point() 
+
+```
+

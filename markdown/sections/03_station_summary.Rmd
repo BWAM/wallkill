@@ -1,0 +1,140 @@
+---
+title: "Untitled"
+author: "Zachary M. Smith"
+date: "4/24/2019"
+output: html_document
+---
+
+
+
+## Data Summary
+
+### Chemistry
+
+```{r, echo=FALSE}
+list.names <- c("peers_2018", "ss_2017", "ss_2018")
+
+chem.list <- chem.df %>% 
+  group_by(project_name) %>% 
+  summarize(date_min = min(as.Date(date_time)),
+         date_max = max(as.Date(date_time)),
+         interval = lubridate::interval(date_min, date_max),
+         date_length = lubridate::time_length(interval, "day"),
+         date_length = paste0("(", date_length, " days)"),
+         date_range = paste(date_min, "to", date_max, date_length),
+         params = paste(unique(chemical_name), collapse = ", "),
+         param_count = length(unique(chemical_name)),
+         stations = paste(unique(station), collapse = ", "),
+         station_count = length(unique(station))) %>% 
+  group_split(project_name)
+
+names(chem.list) <- list.names
+
+freq.list <- chem.df %>% 
+  mutate(date_time = as.Date(date_time)) %>% 
+  select(project_name, station, date_time) %>% 
+  distinct() %>% 
+  arrange(project_name, station, date_time) %>% 
+  group_by(project_name, station) %>% 
+  mutate(count = n(),
+         date_diff = lubridate::interval(dplyr::lag(date_time), date_time) %>%
+           lubridate::time_length("day")) %>% 
+  summarize(count = unique(count),
+            frequency = mean(date_diff, na.rm = TRUE),
+            frequency = if_else(is.nan(frequency), 0, frequency),
+            frequency = round(frequency, 0)) %>% 
+  ungroup() %>% 
+  mutate(samp_freq = if_else(count == 1,
+                                "Only sampled one time",
+                                paste0("Sampled on average every ",
+                                       frequency, " days ",
+                              "(number of visits = ", count, ")"))) %>% 
+  select(project_name, station, samp_freq) %>% 
+  rename("Project_Name" = project_name,
+         "Station" = station,
+         "Sample_Frequency" = samp_freq) %>% 
+  group_split(Project_Name)
+
+names(freq.list) <- list.names
+```
+
+#### 2017 Special Study
+
+```{r, echo=FALSE}
+stations.df %>% 
+  semi_join(chem.df[chem.df$project_name == "wallkill special study 2017", ],
+            by = "station") %>% 
+  bind_rows(stations.df[stations.df$gage == TRUE, ]) %>% 
+  leaflet_plot()
+```
+
+
+* __Description:__
+* __Intent of Collection:__ To update Priority Waterbody List (PWL) segments.
+* __Collected By:__ NYSDEC
+* __Date Range:__ `r chem.list$ss_2017$date_range`
+* __Number of Stations:__ `r chem.list$ss_2017$station_count`
+* __List of Stations:__ `r chem.list$ss_2017$stations`
+* __Number of Parameters:__ `r chem.list$ss_2017$param_count`
+* __List of Parameters:__ `r chem.list$ss_2017$params`
+* __Sampling Frequency:__
+```{r, echo=FALSE}
+knitr::kable(freq.list$ss_2017)
+```
+
+#### 2018 Special Study
+
+```{r, echo=FALSE}
+stations.df %>% 
+  semi_join(chem.df[chem.df$project_name == "wallkill special study 2018", ],
+            by = "station")  %>% 
+  bind_rows(stations.df[stations.df$gage == TRUE, ]) %>% 
+  leaflet_plot()
+```
+
+```{r, echo=FALSE}
+sub_stations.df <- stations.df %>% 
+  semi_join(chem.df[chem.df$project_name == "wallkill special study 2018", ],
+            by = "station") %>% 
+  anti_join(chem.df[chem.df$project_name == "wallkill special study 2017", ],
+            by = "station") %>% 
+  bind_rows(stations.df[stations.df$gage == TRUE, ]) %>% 
+  leaflet_plot()
+
+```
+
+* __Description:__
+* __Intent of Collection:__ To update Priority Waterbody List (PWL) segments. This study expands the spatial and temporal coverage of the [2017 Special Study].
+* __Collected By:__ NYSDEC
+* __Date Range:__ `r chem.list$ss_2018$date_range`
+* __Number of Stations:__ `r chem.list$ss_2018$station_count`
+* __List of Stations:__ `r chem.list$ss_2018$stations`
+* __Number of Parameters:__ `r chem.list$ss_2018$param_count`
+* __List of Parameters:__ `r chem.list$ss_2018$params`
+* __Sampling Frequency:__
+```{r, echo=FALSE}
+knitr::kable(freq.list$ss_2018)
+```
+
+#### 2018 PEER
+
+```{r, echo=FALSE}
+sub_stations.df <- stations.df %>% 
+  semi_join(chem.df[chem.df$project_name == "wallkill peers 2018", ],
+            by = "station") %>% 
+  bind_rows(stations.df[stations.df$gage == TRUE, ]) %>% 
+  leaflet_plot()
+```
+
+* __Description:__ The purpose of the PEERS program is a collaboration between the NYS Department of Environmental Conservation (NYSDEC) Stream Section and self-funded stream monitoring projects outside the NYSDEC to ensure data collected satisfy NYSDEC QA criteria and may be used to augment the NYSDEC Streams Section’s Water Column Chemistry and Biological (macroinvertebrate) data sets.
+* __Intent of Collection:__ The purpose of this PEERS project is to augment NYSDEC’s professional sampling effort and to address local concerns about stormwater runoff and septic impacts.
+* __Collected By:__ Professional External Evaluations of Rivers and Streams (PEERS)
+* __Date Range:__ `r chem.list$peers_2018$date_range`
+* __Number of Stations:__ `r chem.list$peers_2018$station_count`
+* __List of Stations:__ `r chem.list$peers_2018$stations`
+* __Number of Parameters:__ `r chem.list$peers_2018$param_count`
+* __List of Parameters:__ `r chem.list$peers_2018$params`
+* __Sampling Frequency:__
+```{r, echo=FALSE}
+knitr::kable(freq.list$peers_2018)
+```

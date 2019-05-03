@@ -1,22 +1,32 @@
 ---
 title: "Wallkill"
 author: "Zachary M. Smith"
-date: "4/29/2019"
-output: html_document
+output:
+  html_document:
+    toc: true
+    toc_float: true
 ---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache = FALSE)
+```
 
 ```{r, child="sections/01_prep.Rmd"}
 
 ```
 
-```{r, child="sections/02_stations.Rmd"}
+```{r, child="sections/02_station_locations.Rmd"}
 
 ```
 
-```{r, child="sections/03_bap.Rmd"}
+```{r, child="sections/03_station_summary.Rmd"}
 
 ```
 
-```{r, child="sections/04_heatmap.Rmd"}
+```{r, child="sections/04_bap.Rmd"}
+
+```
+
+```{r, child="sections/05_heatmap.Rmd"}
 
 ```
