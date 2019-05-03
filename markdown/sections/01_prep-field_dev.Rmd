@@ -5,6 +5,53 @@ date: "5/2/2019"
 output: html_document
 ---
 
+
+```{r}
+suppressPackageStartupMessages(
+  library(tidyverse)
+)
+library(leaflet)
+```
+
+Establish file path to the project directory. This will be used to access data.
+```{r}
+project.path <- rprojroot::find_rstudio_root_file()
+data.path <- file.path(project.path, "data", "2019-04-30")
+```
+### clean_up
+
+The `clean_up()` function is used to aid in the standardization of the data. The processes described below generally eliminate some of most common string features that can cause erroneous mismatching.
+
+1. `tolower()`- all column names and character column values are converted to lower case strings. 
+2. `trimws()` - leading and trailing whitespace is removed from all column names and character columns.
+3. `gsub()`- more than one space is removed from strings in character columns.
+```{r}
+clean_up <- function(x) {
+  names(x) <- tolower(names(x))
+  names(x) <- trimws(names(x))
+  
+  final.df <- dplyr::mutate_if(x,
+                               is.character,
+                               list(~trimws(tolower(.))))  
+  
+  # remove instances of more than one space
+  final.df <- dplyr::mutate_if(final.df,
+                               is.character,
+                               list(~gsub("[' ']{2,}", " ", .)))  
+  
+  final.df
+}
+```
+## Stations
+
+On 4/30/2019, A.J. Smith suggested that we drop stations sampled for HABs monitoring (i.e., "13-gunk-40.3", "13-gunk-t35-0.2", "13-gunk-37.7", and "13-lgun-6.0").
+```{r}
+ex.station.vec <- c("13-gunk-40.3",
+                    "13-gunk_t35-0.2",
+                    "13-gunk-37.7",
+                    "13-lgun-6.0")
+```
+
 ## Field Data
 
 ### Import
